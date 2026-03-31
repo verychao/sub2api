@@ -829,9 +829,7 @@ export interface AccountUsageInfo {
     status?: string
     is_valid?: boolean | null
     message?: string
-    generated_at?: string | null
     updated_at?: string | null
-    stale?: boolean
     source?: string
     allowed_staleness_seconds?: number
   } | null

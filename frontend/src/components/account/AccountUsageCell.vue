@@ -106,7 +106,7 @@
     </template>
 
     <!-- OpenAI accounts: OAuth usage or API key upstream balance summary -->
-    <template v-else-if="account.platform === 'openai' && (account.type === 'oauth' || account.type === 'apikey' || account.type === 'bedrock' || account.type === 'upstream')">
+    <template v-else-if="account.platform === 'openai' && (account.type === 'oauth' || account.type === 'apikey')">
       <div v-if="hasOpenAIUsageFallback || openAIPlatformUsageSummary" class="space-y-1">
         <div v-if="openAIPlatformUsageSummary" class="space-y-1">
           <div class="flex items-center gap-1 text-[10px] text-gray-600 dark:text-gray-300">
@@ -114,12 +114,6 @@
               {{ formatPlatformRemaining(openAIPlatformUsageSummary.remaining) }}{{ openAIPlatformUsageSummary.unit || 'USD' }}
             </span>
             <span class="text-gray-400 dark:text-gray-500">{{ openAIPlatformUsageSummary.status || 'ok' }}</span>
-            <span
-              v-if="openAIPlatformUsageSummary.stale"
-              class="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-            >
-              stale
-            </span>
           </div>
           <div class="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[220px]" :title="platformUsageMetaTitle">
             {{ platformUsageMetaLine }}
@@ -490,7 +484,7 @@ const usageInfo = ref<AccountUsageInfo | null>(null)
 const showUsageWindows = computed(() => {
   // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
   if (props.account.platform === 'gemini') return true
-  if (props.account.platform === 'openai' && (props.account.type === 'apikey' || props.account.type === 'bedrock' || props.account.type === 'upstream')) return true
+  if (props.account.platform === 'openai' && props.account.type === 'apikey') return true
   return props.account.type === 'oauth' || props.account.type === 'setup-token'
 })
 
@@ -505,7 +499,7 @@ const shouldFetchUsage = computed(() => {
     return props.account.type === 'oauth'
   }
   if (props.account.platform === 'openai') {
-    return props.account.type === 'oauth' || props.account.type === 'apikey' || props.account.type === 'bedrock' || props.account.type === 'upstream'
+    return props.account.type === 'oauth' || props.account.type === 'apikey'
   }
   return false
 })
@@ -535,7 +529,7 @@ const platformUsageMetaLine = computed(() => {
   const summary = openAIPlatformUsageSummary.value
   if (!summary) return ''
   const provider = summary.provider_name || props.account.name
-  const updated = summary.updated_at || summary.generated_at || ''
+  const updated = summary.updated_at || ''
   if (!updated) return provider
   return `${provider} · ${formatRelativeTime(updated)}`
 })

@@ -265,7 +265,7 @@ type AccountUsageService struct {
 	usageFetcher            ClaudeUsageFetcher
 	geminiQuotaService      *GeminiQuotaService
 	antigravityQuotaFetcher *AntigravityQuotaFetcher
-	platformUsageClient     *PlatformUsageClient
+	platformUsageFetcher    *PlatformUsageFetcher
 	cache                   *UsageCache
 	identityCache           IdentityCache
 }
@@ -277,7 +277,7 @@ func NewAccountUsageService(
 	usageFetcher ClaudeUsageFetcher,
 	geminiQuotaService *GeminiQuotaService,
 	antigravityQuotaFetcher *AntigravityQuotaFetcher,
-	platformUsageClient *PlatformUsageClient,
+	platformUsageFetcher *PlatformUsageFetcher,
 	cache *UsageCache,
 	identityCache IdentityCache,
 ) *AccountUsageService {
@@ -287,16 +287,16 @@ func NewAccountUsageService(
 		usageFetcher:            usageFetcher,
 		geminiQuotaService:      geminiQuotaService,
 		antigravityQuotaFetcher: antigravityQuotaFetcher,
-		platformUsageClient:     platformUsageClient,
+		platformUsageFetcher:    platformUsageFetcher,
 		cache:                   cache,
 		identityCache:           identityCache,
 	}
 }
 
 // GetUsage 获取账号使用量
-// OAuth账号: 调用Anthropic API获取真实数据（需要profile scope），API响应缓存10分钟，窗口统计缓存1分钟
-// Setup Token账号: 根据session_window推算5h窗口，7d数据不可用（没有profile scope）
-// API Key账号: 不支持usage查询
+// OAuth账号: 调用上游 usage API 或平台接口获取真实数据，并补充本地窗口统计
+// Setup Token账号: 根据 session_window 推算 5h 窗口，7d 数据不可用（没有 profile scope）
+// OpenAI API Key账号: 读取本地窗口统计，并额外探测 base_url 对应上游的 /v1/usage 余额摘要
 func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64) (*UsageInfo, error) {
 	account, err := s.accountRepo.GetByID(ctx, accountID)
 	if err != nil {
@@ -420,7 +420,7 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64) (*U
 		return usage, nil
 	}
 
-	if account.Platform == PlatformOpenAI && (account.Type == AccountTypeAPIKey || account.Type == AccountTypeBedrock || account.Type == AccountTypeUpstream) {
+	if account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey {
 		usage := &UsageInfo{}
 		now := time.Now()
 		usage.UpdatedAt = &now
@@ -433,7 +433,7 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64) (*U
 		return usage, nil
 	}
 
-	// API Key账号不支持usage查询
+	// 其他账号类型暂无 usage 查询支持
 	return nil, fmt.Errorf("account type %s does not support usage query", account.Type)
 }
 
@@ -491,10 +491,10 @@ func (s *AccountUsageService) GetPassiveUsage(ctx context.Context, accountID int
 }
 
 func (s *AccountUsageService) attachPlatformUsage(ctx context.Context, account *Account, usage *UsageInfo) {
-	if usage == nil || account == nil || s.platformUsageClient == nil || !s.platformUsageClient.Enabled() {
+	if usage == nil || account == nil || s.platformUsageFetcher == nil {
 		return
 	}
-	summary, err := s.platformUsageClient.GetByAccount(ctx, account)
+	summary, err := s.platformUsageFetcher.GetByAccount(ctx, account)
 	if err != nil {
 		if usage.Error == "" {
 			usage.Error = fmt.Sprintf("platform usage sync failed: %v", err)

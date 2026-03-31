@@ -446,7 +446,7 @@ var ProviderSet = wire.NewSet(
 	ProvideClaudeTokenProvider,
 	NewAntigravityGatewayService,
 	ProvideRateLimitService,
-	NewPlatformUsageClient,
+	NewPlatformUsageFetcher,
 	NewAccountUsageService,
 	NewAccountTestService,
 	ProvideSettingService,

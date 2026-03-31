@@ -74,6 +74,7 @@ type Config struct {
 	SubscriptionMaintenance SubscriptionMaintenanceConfig `mapstructure:"subscription_maintenance"`
 	Dashboard               DashboardCacheConfig          `mapstructure:"dashboard_cache"`
 	DashboardAgg            DashboardAggregationConfig    `mapstructure:"dashboard_aggregation"`
+	PlatformUsage           PlatformUsageConfig           `mapstructure:"platform_usage"`
 	UsageCleanup            UsageCleanupConfig            `mapstructure:"usage_cleanup"`
 	Concurrency             ConcurrencyConfig             `mapstructure:"concurrency"`
 	TokenRefresh            TokenRefreshConfig            `mapstructure:"token_refresh"`
@@ -83,6 +84,13 @@ type Config struct {
 	Gemini                  GeminiConfig                  `mapstructure:"gemini"`
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
+}
+
+type PlatformUsageConfig struct {
+	Enabled          bool   `mapstructure:"enabled"`
+	URL              string `mapstructure:"url"`
+	TimeoutSeconds   int    `mapstructure:"timeout_seconds"`
+	AllowedStaleness int    `mapstructure:"allowed_staleness_seconds"`
 }
 
 type LogConfig struct {
@@ -1033,6 +1041,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	cfg.LinuxDo.UserInfoIDPath = strings.TrimSpace(cfg.LinuxDo.UserInfoIDPath)
 	cfg.LinuxDo.UserInfoUsernamePath = strings.TrimSpace(cfg.LinuxDo.UserInfoUsernamePath)
 	cfg.Dashboard.KeyPrefix = strings.TrimSpace(cfg.Dashboard.KeyPrefix)
+	cfg.PlatformUsage.URL = strings.TrimSpace(cfg.PlatformUsage.URL)
 	cfg.CORS.AllowedOrigins = normalizeStringSlice(cfg.CORS.AllowedOrigins)
 	cfg.Security.ResponseHeaders.AdditionalAllowed = normalizeStringSlice(cfg.Security.ResponseHeaders.AdditionalAllowed)
 	cfg.Security.ResponseHeaders.ForceRemove = normalizeStringSlice(cfg.Security.ResponseHeaders.ForceRemove)
@@ -1294,6 +1303,12 @@ func setDefaults() {
 	viper.SetDefault("dashboard_cache.stats_fresh_ttl_seconds", 15)
 	viper.SetDefault("dashboard_cache.stats_ttl_seconds", 30)
 	viper.SetDefault("dashboard_cache.stats_refresh_timeout_seconds", 30)
+
+	// Platform usage sync
+	viper.SetDefault("platform_usage.enabled", false)
+	viper.SetDefault("platform_usage.url", "")
+	viper.SetDefault("platform_usage.timeout_seconds", 8)
+	viper.SetDefault("platform_usage.allowed_staleness_seconds", 900)
 
 	// Dashboard aggregation
 	viper.SetDefault("dashboard_aggregation.enabled", true)
@@ -1742,6 +1757,27 @@ func (c *Config) Validate() error {
 		}
 		if c.Dashboard.StatsRefreshTimeoutSeconds < 0 {
 			return fmt.Errorf("dashboard_cache.stats_refresh_timeout_seconds must be non-negative")
+		}
+	}
+	if c.PlatformUsage.Enabled {
+		if c.PlatformUsage.URL == "" {
+			return fmt.Errorf("platform_usage.url is required when platform_usage.enabled=true")
+		}
+		if err := ValidateAbsoluteHTTPURL(c.PlatformUsage.URL); err != nil {
+			return fmt.Errorf("platform_usage.url invalid: %w", err)
+		}
+		if c.PlatformUsage.TimeoutSeconds <= 0 {
+			return fmt.Errorf("platform_usage.timeout_seconds must be positive")
+		}
+		if c.PlatformUsage.AllowedStaleness < 0 {
+			return fmt.Errorf("platform_usage.allowed_staleness_seconds must be non-negative")
+		}
+	} else {
+		if c.PlatformUsage.TimeoutSeconds < 0 {
+			return fmt.Errorf("platform_usage.timeout_seconds must be non-negative")
+		}
+		if c.PlatformUsage.AllowedStaleness < 0 {
+			return fmt.Errorf("platform_usage.allowed_staleness_seconds must be non-negative")
 		}
 	}
 	if c.DashboardAgg.Enabled {

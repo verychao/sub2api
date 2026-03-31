@@ -820,6 +820,21 @@ export interface AccountUsageInfo {
   error_code?: string
 
   error?: string            // usage 获取失败时的错误信息
+
+  platform_usage?: {
+    provider_name?: string
+    base_url?: string
+    remaining?: number | null
+    unit?: string | null
+    status?: string
+    is_valid?: boolean | null
+    message?: string
+    generated_at?: string | null
+    updated_at?: string | null
+    stale?: boolean
+    source?: string
+    allowed_staleness_seconds?: number
+  } | null
 }
 
 // OpenAI Codex usage snapshot (from response headers)

@@ -221,6 +221,9 @@ type UsageInfo struct {
 
 	// 获取 usage 时的错误信息（降级返回，而非 500）
 	Error string `json:"error,omitempty"`
+
+	// OpenAI API Key/中转站上游余额摘要
+	PlatformUsage *PlatformUsageSummary `json:"platform_usage,omitempty"`
 }
 
 // ClaudeUsageResponse Anthropic API返回的usage结构
@@ -262,6 +265,7 @@ type AccountUsageService struct {
 	usageFetcher            ClaudeUsageFetcher
 	geminiQuotaService      *GeminiQuotaService
 	antigravityQuotaFetcher *AntigravityQuotaFetcher
+	platformUsageClient     *PlatformUsageClient
 	cache                   *UsageCache
 	identityCache           IdentityCache
 }
@@ -273,6 +277,7 @@ func NewAccountUsageService(
 	usageFetcher ClaudeUsageFetcher,
 	geminiQuotaService *GeminiQuotaService,
 	antigravityQuotaFetcher *AntigravityQuotaFetcher,
+	platformUsageClient *PlatformUsageClient,
 	cache *UsageCache,
 	identityCache IdentityCache,
 ) *AccountUsageService {
@@ -282,6 +287,7 @@ func NewAccountUsageService(
 		usageFetcher:            usageFetcher,
 		geminiQuotaService:      geminiQuotaService,
 		antigravityQuotaFetcher: antigravityQuotaFetcher,
+		platformUsageClient:     platformUsageClient,
 		cache:                   cache,
 		identityCache:           identityCache,
 	}
@@ -299,6 +305,7 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64) (*U
 
 	if account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {
 		usage, err := s.getOpenAIUsage(ctx, account)
+		s.attachPlatformUsage(ctx, account, usage)
 		if err == nil {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}
@@ -307,6 +314,7 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64) (*U
 
 	if account.Platform == PlatformGemini {
 		usage, err := s.getGeminiUsage(ctx, account)
+		s.attachPlatformUsage(ctx, account, usage)
 		if err == nil {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}
@@ -316,6 +324,7 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64) (*U
 	// Antigravity 平台：使用 AntigravityQuotaFetcher 获取额度
 	if account.Platform == PlatformAntigravity {
 		usage, err := s.getAntigravityUsage(ctx, account)
+		s.attachPlatformUsage(ctx, account, usage)
 		if err == nil {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}
@@ -393,6 +402,7 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64) (*U
 
 		// 4. 添加窗口统计（有独立缓存，1 分钟）
 		s.addWindowStats(ctx, account, usage)
+		s.attachPlatformUsage(ctx, account, usage)
 
 		// 5. 将主动查询结果同步到被动缓存，下次 passive 加载即为最新值
 		s.syncActiveToPassive(ctx, account.ID, usage)
@@ -406,6 +416,20 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64) (*U
 		usage := s.estimateSetupTokenUsage(account)
 		// 添加窗口统计
 		s.addWindowStats(ctx, account, usage)
+		s.attachPlatformUsage(ctx, account, usage)
+		return usage, nil
+	}
+
+	if account.Platform == PlatformOpenAI && (account.Type == AccountTypeAPIKey || account.Type == AccountTypeBedrock || account.Type == AccountTypeUpstream) {
+		usage := &UsageInfo{}
+		now := time.Now()
+		usage.UpdatedAt = &now
+		if s.usageLogRepo != nil {
+			if stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, now.Add(-24*time.Hour)); err == nil {
+				usage.FiveHour = &UsageProgress{Utilization: 0, WindowStats: windowStatsFromAccountStats(stats)}
+			}
+		}
+		s.attachPlatformUsage(ctx, account, usage)
 		return usage, nil
 	}
 
@@ -461,8 +485,25 @@ func (s *AccountUsageService) GetPassiveUsage(ctx context.Context, accountID int
 
 	// 添加窗口统计
 	s.addWindowStats(ctx, account, info)
+	s.attachPlatformUsage(ctx, account, info)
 
 	return info, nil
+}
+
+func (s *AccountUsageService) attachPlatformUsage(ctx context.Context, account *Account, usage *UsageInfo) {
+	if usage == nil || account == nil || s.platformUsageClient == nil || !s.platformUsageClient.Enabled() {
+		return
+	}
+	summary, err := s.platformUsageClient.GetByAccount(ctx, account)
+	if err != nil {
+		if usage.Error == "" {
+			usage.Error = fmt.Sprintf("platform usage sync failed: %v", err)
+		}
+		return
+	}
+	if summary != nil {
+		usage.PlatformUsage = summary
+	}
 }
 
 // syncActiveToPassive 将主动查询的最新数据回写到 Extra 被动缓存，

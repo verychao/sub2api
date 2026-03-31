@@ -105,9 +105,26 @@
       <div v-else class="text-xs text-gray-400">-</div>
     </template>
 
-    <!-- OpenAI OAuth accounts: single source from /usage API -->
-    <template v-else-if="account.platform === 'openai' && account.type === 'oauth'">
-      <div v-if="hasOpenAIUsageFallback" class="space-y-1">
+    <!-- OpenAI accounts: OAuth usage or API key upstream balance summary -->
+    <template v-else-if="account.platform === 'openai' && (account.type === 'oauth' || account.type === 'apikey' || account.type === 'bedrock' || account.type === 'upstream')">
+      <div v-if="hasOpenAIUsageFallback || openAIPlatformUsageSummary" class="space-y-1">
+        <div v-if="openAIPlatformUsageSummary" class="space-y-1">
+          <div class="flex items-center gap-1 text-[10px] text-gray-600 dark:text-gray-300">
+            <span class="font-medium text-emerald-600 dark:text-emerald-400">
+              {{ formatPlatformRemaining(openAIPlatformUsageSummary.remaining) }}{{ openAIPlatformUsageSummary.unit || 'USD' }}
+            </span>
+            <span class="text-gray-400 dark:text-gray-500">{{ openAIPlatformUsageSummary.status || 'ok' }}</span>
+            <span
+              v-if="openAIPlatformUsageSummary.stale"
+              class="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+            >
+              stale
+            </span>
+          </div>
+          <div class="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[220px]" :title="platformUsageMetaTitle">
+            {{ platformUsageMetaLine }}
+          </div>
+        </div>
         <UsageProgressBar
           v-if="usageInfo?.five_hour"
           label="5h"
@@ -473,6 +490,7 @@ const usageInfo = ref<AccountUsageInfo | null>(null)
 const showUsageWindows = computed(() => {
   // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
   if (props.account.platform === 'gemini') return true
+  if (props.account.platform === 'openai' && (props.account.type === 'apikey' || props.account.type === 'bedrock' || props.account.type === 'upstream')) return true
   return props.account.type === 'oauth' || props.account.type === 'setup-token'
 })
 
@@ -487,7 +505,7 @@ const shouldFetchUsage = computed(() => {
     return props.account.type === 'oauth'
   }
   if (props.account.platform === 'openai') {
-    return props.account.type === 'oauth'
+    return props.account.type === 'oauth' || props.account.type === 'apikey' || props.account.type === 'bedrock' || props.account.type === 'upstream'
   }
   return false
 })
@@ -504,9 +522,36 @@ const geminiUsageAvailable = computed(() => {
 })
 
 const hasOpenAIUsageFallback = computed(() => {
-  if (props.account.platform !== 'openai' || props.account.type !== 'oauth') return false
+  if (props.account.platform !== 'openai') return false
   return !!usageInfo.value?.five_hour || !!usageInfo.value?.seven_day
 })
+
+const openAIPlatformUsageSummary = computed(() => {
+  if (props.account.platform !== 'openai') return null
+  return usageInfo.value?.platform_usage || null
+})
+
+const platformUsageMetaLine = computed(() => {
+  const summary = openAIPlatformUsageSummary.value
+  if (!summary) return ''
+  const provider = summary.provider_name || props.account.name
+  const updated = summary.updated_at || summary.generated_at || ''
+  if (!updated) return provider
+  return `${provider} · ${formatRelativeTime(updated)}`
+})
+
+const platformUsageMetaTitle = computed(() => {
+  const summary = openAIPlatformUsageSummary.value
+  if (!summary) return ''
+  return summary.message || summary.base_url || platformUsageMetaLine.value
+})
+
+const formatPlatformRemaining = (value?: number | null) => {
+  if (value == null || Number.isNaN(value)) return '- '
+  if (value >= 100) return `${value.toFixed(0)} `
+  if (value >= 10) return `${value.toFixed(2)} `
+  return `${value.toFixed(3)} `
+}
 
 const openAIUsageRefreshKey = computed(() => buildOpenAIUsageRefreshKey(props.account))
 

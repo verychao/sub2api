@@ -90,7 +90,7 @@ func (f *PlatformUsageFetcher) GetByAccount(ctx context.Context, account *Accoun
 	if err != nil {
 		return buildPlatformUsageSummary(account, baseURL, platformUsageStatusRequestFailed, nil, nil, nil, err.Error()), nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {

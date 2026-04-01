@@ -210,6 +210,12 @@
               :manual-refresh-token="usageManualRefreshToken"
             />
           </template>
+          <template #cell-upstream_balance="{ row }">
+            <AccountUpstreamBalanceCell
+              :account="row"
+              :manual-refresh-token="globalUpstreamBalanceRefreshToken + (upstreamBalanceManualRefreshTokenByAccountId[String(row.id)] ?? 0)"
+            />
+          </template>
           <template #cell-proxy="{ row }">
             <div v-if="row.proxy" class="flex items-center gap-2">
               <span class="text-sm text-gray-700 dark:text-gray-300">{{ row.proxy.name }}</span>
@@ -276,7 +282,7 @@
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
-    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @sync-balance="handleSyncBalance" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditAccountModal :show="showBulkEdit" :account-ids="selIds" :selected-platforms="selPlatforms" :selected-types="selTypes" :proxies="proxies" :groups="groups" @close="showBulkEdit = false" @updated="handleBulkUpdated" />
@@ -320,6 +326,7 @@ import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.
 import type { SelectOption } from '@/components/common/Select.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
 import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
+import AccountUpstreamBalanceCell from '@/components/account/AccountUpstreamBalanceCell.vue'
 import AccountTodayStatsCell from '@/components/account/AccountTodayStatsCell.vue'
 import AccountGroupsCell from '@/components/account/AccountGroupsCell.vue'
 import AccountCapacityCell from '@/components/account/AccountCapacityCell.vue'
@@ -408,6 +415,8 @@ const todayStatsError = ref<string | null>(null)
 const todayStatsReqSeq = ref(0)
 const pendingTodayStatsRefresh = ref(false)
 const usageManualRefreshToken = ref(0)
+const globalUpstreamBalanceRefreshToken = ref(0)
+const upstreamBalanceManualRefreshTokenByAccountId = ref<Record<string, number>>({})
 
 const buildDefaultTodayStats = (): WindowStats => ({
   requests: 0,
@@ -788,6 +797,7 @@ const handleManualRefresh = async () => {
   await load()
   // Force usage cells to refetch /usage on explicit user refresh.
   usageManualRefreshToken.value += 1
+  globalUpstreamBalanceRefreshToken.value += 1
 }
 
 const syncPendingListChanges = async () => {
@@ -795,6 +805,7 @@ const syncPendingListChanges = async () => {
   await load()
   // Keep behavior consistent with manual refresh.
   usageManualRefreshToken.value += 1
+  globalUpstreamBalanceRefreshToken.value += 1
 }
 
 const { pause: pauseAutoRefresh, resume: resumeAutoRefresh } = useIntervalFn(
@@ -874,6 +885,7 @@ const allColumns = computed(() => {
   }
   c.push(
     { key: 'usage', label: t('admin.accounts.columns.usageWindows'), sortable: false },
+    { key: 'upstream_balance', label: t('admin.accounts.columns.upstreamBalance'), sortable: false },
     { key: 'proxy', label: t('admin.accounts.columns.proxy'), sortable: false },
     { key: 'priority', label: t('admin.accounts.columns.priority'), sortable: true },
     { key: 'rate_multiplier', label: t('admin.accounts.columns.billingRateMultiplier'), sortable: true },
@@ -1240,6 +1252,14 @@ const handleResetQuota = async (a: Account) => {
   } catch (error) {
     console.error('Failed to reset quota:', error)
   }
+}
+const handleSyncBalance = async (a: Account) => {
+  const key = String(a.id)
+  upstreamBalanceManualRefreshTokenByAccountId.value = {
+    ...upstreamBalanceManualRefreshTokenByAccountId.value,
+    [key]: (upstreamBalanceManualRefreshTokenByAccountId.value[key] ?? 0) + 1
+  }
+  appStore.showSuccess(t('admin.accounts.syncUpstreamBalanceTriggered'))
 }
 const handleSetPrivacy = async (a: Account) => {
   try {

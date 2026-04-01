@@ -108,11 +108,13 @@ func (f *PlatformUsageFetcher) GetByAccount(ctx context.Context, account *Accoun
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || detectInvalidKeyMessage(payload) {
 		isValid := false
-		return buildPlatformUsageSummary(account, baseURL, platformUsageStatusInvalidKey, nil, strPtr("USD"), &isValid, extractPlatformUsageMessage(payload, fmt.Sprintf("upstream rejected API key with HTTP %d", resp.StatusCode))), nil
+		unit := "USD"
+		return buildPlatformUsageSummary(account, baseURL, platformUsageStatusInvalidKey, nil, &unit, &isValid, extractPlatformUsageMessage(payload, fmt.Sprintf("upstream rejected API key with HTTP %d", resp.StatusCode))), nil
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return buildPlatformUsageSummary(account, baseURL, platformUsageStatusRequestFailed, nil, strPtr("USD"), nil, extractPlatformUsageMessage(payload, fmt.Sprintf("upstream returned HTTP %d", resp.StatusCode))), nil
+		unit := "USD"
+		return buildPlatformUsageSummary(account, baseURL, platformUsageStatusRequestFailed, nil, &unit, nil, extractPlatformUsageMessage(payload, fmt.Sprintf("upstream returned HTTP %d", resp.StatusCode))), nil
 	}
 
 	remaining, unit, err := normalizePlatformUsagePayload(payload, "USD")
@@ -299,5 +301,3 @@ func trimPlatformUsageMessage(value string) string {
 	}
 	return sanitized[:140] + "..."
 }
-
-func strPtr(v string) *string { return &v }

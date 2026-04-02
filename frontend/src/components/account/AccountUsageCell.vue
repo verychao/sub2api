@@ -105,20 +105,9 @@
       <div v-else class="text-xs text-gray-400">-</div>
     </template>
 
-    <!-- OpenAI accounts: OAuth usage or API key upstream balance summary -->
+    <!-- OpenAI accounts: OAuth usage windows only -->
     <template v-else-if="account.platform === 'openai' && (account.type === 'oauth' || account.type === 'apikey')">
-      <div v-if="hasOpenAIUsageFallback || openAIPlatformUsageSummary" class="space-y-1">
-        <div v-if="openAIPlatformUsageSummary" class="space-y-1">
-          <div class="flex items-center gap-1 text-[10px] text-gray-600 dark:text-gray-300">
-            <span class="font-medium text-emerald-600 dark:text-emerald-400">
-              {{ formatPlatformRemaining(openAIPlatformUsageSummary.remaining) }}{{ openAIPlatformUsageSummary.unit || 'USD' }}
-            </span>
-            <span class="text-gray-400 dark:text-gray-500">{{ openAIPlatformUsageSummary.status || 'ok' }}</span>
-          </div>
-          <div class="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[220px]" :title="platformUsageMetaTitle">
-            {{ platformUsageMetaLine }}
-          </div>
-        </div>
+      <div v-if="hasOpenAIUsageFallback" class="space-y-1">
         <UsageProgressBar
           v-if="usageInfo?.five_hour"
           label="5h"
@@ -455,7 +444,7 @@ import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
-import { formatCompactNumber, formatRelativeTime } from '@/utils/format'
+import { formatCompactNumber } from '@/utils/format'
 import UsageProgressBar from './UsageProgressBar.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
 
@@ -519,33 +508,6 @@ const hasOpenAIUsageFallback = computed(() => {
   if (props.account.platform !== 'openai') return false
   return !!usageInfo.value?.five_hour || !!usageInfo.value?.seven_day
 })
-
-const openAIPlatformUsageSummary = computed(() => {
-  if (props.account.platform !== 'openai') return null
-  return usageInfo.value?.platform_usage || null
-})
-
-const platformUsageMetaLine = computed(() => {
-  const summary = openAIPlatformUsageSummary.value
-  if (!summary) return ''
-  const provider = summary.provider_name || props.account.name
-  const updated = summary.updated_at || ''
-  if (!updated) return provider
-  return `${provider} · ${formatRelativeTime(updated)}`
-})
-
-const platformUsageMetaTitle = computed(() => {
-  const summary = openAIPlatformUsageSummary.value
-  if (!summary) return ''
-  return summary.message || summary.base_url || platformUsageMetaLine.value
-})
-
-const formatPlatformRemaining = (value?: number | null) => {
-  if (value == null || Number.isNaN(value)) return '- '
-  if (value >= 100) return `${value.toFixed(0)} `
-  if (value >= 10) return `${value.toFixed(2)} `
-  return `${value.toFixed(3)} `
-}
 
 const openAIUsageRefreshKey = computed(() => buildOpenAIUsageRefreshKey(props.account))
 

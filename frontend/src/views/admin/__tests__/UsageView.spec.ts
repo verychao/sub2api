@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 import UsageView from '../UsageView.vue'
 
-const { list, getStats, getSnapshotV2, getById } = vi.hoisted(() => {
+const { list, getStats, getSnapshotV2, getModelStats, getById } = vi.hoisted(() => {
   vi.stubGlobal('localStorage', {
     getItem: vi.fn(() => null),
     setItem: vi.fn(),
@@ -14,6 +14,7 @@ const { list, getStats, getSnapshotV2, getById } = vi.hoisted(() => {
     list: vi.fn(),
     getStats: vi.fn(),
     getSnapshotV2: vi.fn(),
+    getModelStats: vi.fn(),
     getById: vi.fn(),
   }
 })
@@ -40,6 +41,7 @@ vi.mock('@/api/admin', () => ({
     },
     dashboard: {
       getSnapshotV2,
+      getModelStats,
     },
     users: {
       getById,
@@ -104,6 +106,16 @@ const GroupDistributionChartStub = {
     </div>
   `,
 }
+const AccountDistributionCardStub = {
+  props: ['metric'],
+  emits: ['update:metric'],
+  template: `
+    <div data-test="account-card">
+      <span class="metric">{{ metric }}</span>
+      <button class="switch-metric" @click="$emit('update:metric', 'actual_cost')">switch</button>
+    </div>
+  `,
+}
 
 describe('admin UsageView distribution metric toggles', () => {
   beforeEach(() => {
@@ -111,6 +123,7 @@ describe('admin UsageView distribution metric toggles', () => {
     list.mockReset()
     getStats.mockReset()
     getSnapshotV2.mockReset()
+    getModelStats.mockReset()
     getById.mockReset()
 
     list.mockResolvedValue({
@@ -127,11 +140,15 @@ describe('admin UsageView distribution metric toggles', () => {
       total_cost: 0,
       total_actual_cost: 0,
       average_duration_ms: 0,
+      accounts: [],
     })
     getSnapshotV2.mockResolvedValue({
       trend: [],
       models: [],
       groups: [],
+    })
+    getModelStats.mockResolvedValue({
+      models: [],
     })
   })
 
@@ -157,6 +174,7 @@ describe('admin UsageView distribution metric toggles', () => {
           TokenUsageTrend: true,
           ModelDistributionChart: ModelDistributionChartStub,
           GroupDistributionChart: GroupDistributionChartStub,
+          AccountDistributionCard: AccountDistributionCardStub,
         },
       },
     })
@@ -175,15 +193,18 @@ describe('admin UsageView distribution metric toggles', () => {
 
     const modelChart = wrapper.find('[data-test="model-chart"]')
     const groupChart = wrapper.find('[data-test="group-chart"]')
+    const accountCard = wrapper.find('[data-test="account-card"]')
 
     expect(modelChart.find('.metric').text()).toBe('tokens')
     expect(groupChart.find('.metric').text()).toBe('tokens')
+    expect(accountCard.find('.metric').text()).toBe('tokens')
 
     await modelChart.find('.switch-metric').trigger('click')
     await flushPromises()
 
     expect(modelChart.find('.metric').text()).toBe('actual_cost')
     expect(groupChart.find('.metric').text()).toBe('tokens')
+    expect(accountCard.find('.metric').text()).toBe('tokens')
     expect(getSnapshotV2).toHaveBeenCalledTimes(1)
 
     await groupChart.find('.switch-metric').trigger('click')
@@ -191,6 +212,13 @@ describe('admin UsageView distribution metric toggles', () => {
 
     expect(modelChart.find('.metric').text()).toBe('actual_cost')
     expect(groupChart.find('.metric').text()).toBe('actual_cost')
+    expect(accountCard.find('.metric').text()).toBe('tokens')
+    expect(getSnapshotV2).toHaveBeenCalledTimes(1)
+
+    await accountCard.find('.switch-metric').trigger('click')
+    await flushPromises()
+
+    expect(accountCard.find('.metric').text()).toBe('actual_cost')
     expect(getSnapshotV2).toHaveBeenCalledTimes(1)
   })
 })

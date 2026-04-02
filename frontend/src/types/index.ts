@@ -1227,6 +1227,15 @@ export interface GroupStat {
   actual_cost: number // 实际扣除
 }
 
+export interface AccountStat {
+  account_id: number
+  account_name: string
+  requests: number
+  total_tokens: number
+  cost: number
+  actual_cost: number
+}
+
 export interface UserBreakdownItem {
   user_id: number
   email: string

@@ -2074,6 +2074,9 @@ type TrendDataPoint = usagestats.TrendDataPoint
 // ModelStat represents usage statistics for a single model
 type ModelStat = usagestats.ModelStat
 
+// AccountStat represents usage statistics for a single upstream account.
+type AccountStat = usagestats.AccountStat
+
 // UserUsageTrendPoint represents user usage trend data point
 type UserUsageTrendPoint = usagestats.UserUsageTrendPoint
 
@@ -3067,6 +3070,70 @@ func (r *usageLogRepository) GetGroupStatsWithFilters(ctx context.Context, start
 	return results, nil
 }
 
+// GetAccountStatsWithFilters returns upstream account usage statistics with optional filters.
+func (r *usageLogRepository) GetAccountStatsWithFilters(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, requestType *int16, stream *bool, billingType *int8) (results []usagestats.AccountStat, err error) {
+	query := `
+		SELECT
+			COALESCE(ul.account_id, 0) as account_id,
+			COALESCE(a.name, '') as account_name,
+			COUNT(*) as requests,
+			COALESCE(SUM(ul.input_tokens + ul.output_tokens + ul.cache_creation_tokens + ul.cache_read_tokens), 0) as total_tokens,
+			COALESCE(SUM(ul.total_cost), 0) as cost,
+			COALESCE(SUM(ul.actual_cost), 0) as actual_cost
+		FROM usage_logs ul
+		LEFT JOIN accounts a ON a.id = ul.account_id
+		WHERE ul.created_at >= $1 AND ul.created_at < $2
+	`
+
+	args := []any{startTime, endTime}
+	if userID > 0 {
+		query += fmt.Sprintf(" AND ul.user_id = $%d", len(args)+1)
+		args = append(args, userID)
+	}
+	if apiKeyID > 0 {
+		query += fmt.Sprintf(" AND ul.api_key_id = $%d", len(args)+1)
+		args = append(args, apiKeyID)
+	}
+	if accountID > 0 {
+		query += fmt.Sprintf(" AND ul.account_id = $%d", len(args)+1)
+		args = append(args, accountID)
+	}
+	if groupID > 0 {
+		query += fmt.Sprintf(" AND ul.group_id = $%d", len(args)+1)
+		args = append(args, groupID)
+	}
+	query, args = appendRequestTypeOrStreamQueryFilter(query, args, requestType, stream)
+	if billingType != nil {
+		query += fmt.Sprintf(" AND ul.billing_type = $%d", len(args)+1)
+		args = append(args, int16(*billingType))
+	}
+	query += " GROUP BY ul.account_id, a.name ORDER BY actual_cost DESC, total_tokens DESC, ul.account_id ASC"
+
+	rows, err := r.sql.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+			results = nil
+		}
+	}()
+
+	results = make([]usagestats.AccountStat, 0)
+	for rows.Next() {
+		var row usagestats.AccountStat
+		if err := rows.Scan(&row.AccountID, &row.AccountName, &row.Requests, &row.TotalTokens, &row.Cost, &row.ActualCost); err != nil {
+			return nil, err
+		}
+		results = append(results, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
 // GetUserBreakdownStats returns per-user usage breakdown within a specific dimension.
 func (r *usageLogRepository) GetUserBreakdownStats(ctx context.Context, startTime, endTime time.Time, dim usagestats.UserBreakdownDimension, limit int) (results []usagestats.UserBreakdownItem, err error) {
 	query := `
@@ -3321,6 +3388,11 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 		logger.LegacyPrintf("repository.usage_log", "GetUpstreamEndpointStatsWithFilters failed in GetStatsWithFilters: %v", upstreamEndpointErr)
 		upstreamEndpoints = []EndpointStat{}
 	}
+	accounts, accountErr := r.GetAccountStatsWithFilters(ctx, start, end, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.RequestType, filters.Stream, filters.BillingType)
+	if accountErr != nil {
+		logger.LegacyPrintf("repository.usage_log", "GetAccountStatsWithFilters failed in GetStatsWithFilters: %v", accountErr)
+		accounts = []AccountStat{}
+	}
 	endpointPaths, endpointPathErr := r.getEndpointPathStatsWithFilters(ctx, start, end, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.RequestType, filters.Stream, filters.BillingType)
 	if endpointPathErr != nil {
 		logger.LegacyPrintf("repository.usage_log", "getEndpointPathStatsWithFilters failed in GetStatsWithFilters: %v", endpointPathErr)
@@ -3328,6 +3400,7 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 	}
 	stats.Endpoints = endpoints
 	stats.UpstreamEndpoints = upstreamEndpoints
+	stats.Accounts = accounts
 	stats.EndpointPaths = endpointPaths
 
 	return stats, nil

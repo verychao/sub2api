@@ -60,6 +60,13 @@
           />
           <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <AccountDistributionCard
+            v-model:metric="accountDistributionMetric"
+            :accounts="accountStats"
+            :loading="endpointStatsLoading"
+          />
+        </div>
       </div>
       <UsageFilters v-model="filters" :start-date="startDate" :end-date="endDate" :exporting="exporting" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
         <template #after-reset>
@@ -134,8 +141,9 @@ import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
+import AccountDistributionCard from '@/components/charts/AccountDistributionCard.vue'
 import Icon from '@/components/icons/Icon.vue'
-import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
+import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AccountStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -153,11 +161,13 @@ const loadedModelSources = reactive<Record<ModelDistributionSource, boolean>>({
   mapping: false,
 })
 const groupDistributionMetric = ref<DistributionMetric>('tokens')
+const accountDistributionMetric = ref<DistributionMetric>('tokens')
 const endpointDistributionMetric = ref<DistributionMetric>('tokens')
 const endpointDistributionSource = ref<EndpointSource>('inbound')
 const inboundEndpointStats = ref<EndpointStat[]>([])
 const upstreamEndpointStats = ref<EndpointStat[]>([])
 const endpointPathStats = ref<EndpointStat[]>([])
+const accountStats = ref<AccountStat[]>([])
 const endpointStatsLoading = ref(false)
 let abortController: AbortController | null = null; let exportAbortController: AbortController | null = null
 let chartReqSeq = 0
@@ -272,12 +282,14 @@ const loadStats = async () => {
     inboundEndpointStats.value = s.endpoints || []
     upstreamEndpointStats.value = s.upstream_endpoints || []
     endpointPathStats.value = s.endpoint_paths || []
+    accountStats.value = s.accounts || []
   } catch (error) {
     if (seq !== statsReqSeq) return
     console.error('Failed to load usage stats:', error)
     inboundEndpointStats.value = []
     upstreamEndpointStats.value = []
     endpointPathStats.value = []
+    accountStats.value = []
   } finally {
     if (seq === statsReqSeq) endpointStatsLoading.value = false
   }
@@ -471,7 +483,7 @@ const HIDDEN_COLUMNS_KEY = 'usage-hidden-columns'
 const allColumns = computed(() => [
   { key: 'user', label: t('admin.usage.user'), sortable: false },
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
-  { key: 'account', label: t('admin.usage.account'), sortable: false },
+  { key: 'account', label: t('admin.usage.upstreamAccount'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true },
   { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },

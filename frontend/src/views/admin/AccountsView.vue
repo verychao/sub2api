@@ -213,7 +213,7 @@
           <template #cell-upstream_balance="{ row }">
             <AccountUpstreamBalanceCell
               :account="row"
-              :manual-refresh-token="globalUpstreamBalanceRefreshToken + (upstreamBalanceManualRefreshTokenByAccountId[String(row.id)] ?? 0)"
+              :manual-refresh-token="globalUpstreamBalanceRefreshToken"
             />
           </template>
           <template #cell-proxy="{ row }">
@@ -234,7 +234,7 @@
             <span class="text-sm text-gray-700 dark:text-gray-300">{{ value }}</span>
           </template>
           <template #cell-last_used_at="{ value }">
-            <span class="text-sm text-gray-500 dark:text-dark-400">{{ formatRelativeTime(value) }}</span>
+            <span class="text-sm text-gray-500 dark:text-dark-400">{{ formatLastUsedAt(value) }}</span>
           </template>
           <template #cell-expires_at="{ row, value }">
             <div class="flex flex-col items-start gap-1">
@@ -282,7 +282,7 @@
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
-    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @sync-balance="handleSyncBalance" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditAccountModal :show="showBulkEdit" :account-ids="selIds" :selected-platforms="selPlatforms" :selected-types="selTypes" :proxies="proxies" :groups="groups" @close="showBulkEdit = false" @updated="handleBulkUpdated" />
@@ -416,7 +416,6 @@ const todayStatsReqSeq = ref(0)
 const pendingTodayStatsRefresh = ref(false)
 const usageManualRefreshToken = ref(0)
 const globalUpstreamBalanceRefreshToken = ref(0)
-const upstreamBalanceManualRefreshTokenByAccountId = ref<Record<string, number>>({})
 
 const buildDefaultTodayStats = (): WindowStats => ({
   requests: 0,
@@ -1253,14 +1252,6 @@ const handleResetQuota = async (a: Account) => {
     console.error('Failed to reset quota:', error)
   }
 }
-const handleSyncBalance = async (a: Account) => {
-  const key = String(a.id)
-  upstreamBalanceManualRefreshTokenByAccountId.value = {
-    ...upstreamBalanceManualRefreshTokenByAccountId.value,
-    [key]: (upstreamBalanceManualRefreshTokenByAccountId.value[key] ?? 0) + 1
-  }
-  appStore.showSuccess(t('admin.accounts.syncUpstreamBalanceTriggered'))
-}
 const handleSetPrivacy = async (a: Account) => {
   try {
     const updated = await adminAPI.accounts.setPrivacy(a.id)
@@ -1309,6 +1300,11 @@ const formatExpiresAt = (value: number | null) => {
     },
     'sv-SE'
   )
+}
+const formatLastUsedAt = (value: string | null | undefined) => {
+  if (!value) return '-'
+  const formatted = formatRelativeTime(value)
+  return formatted === t('common.time.never') ? '-' : formatted
 }
 const isExpired = (value: number | null) => {
   if (!value) return false

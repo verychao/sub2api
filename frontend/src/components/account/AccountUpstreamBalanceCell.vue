@@ -1,11 +1,15 @@
 <template>
   <div v-if="isSupported" class="space-y-1">
-    <div v-if="summary" class="space-y-1">
+    <div v-if="summary" class="space-y-0.5">
       <div class="text-[11px] font-medium" :class="statusClass">
         {{ balanceLine }}
       </div>
-      <div class="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[140px]" :title="summary.message || summary.base_url || ''">
-        {{ statusLine }}
+      <div
+        v-if="metaLine"
+        class="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[140px]"
+        :title="summary.message || summary.base_url || ''"
+      >
+        {{ metaLine }}
       </div>
     </div>
     <div v-else-if="loading" class="space-y-1">
@@ -20,7 +24,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue'
 import { adminAPI } from '@/api/admin'
-import { formatRelativeTime } from '@/utils/format'
 import type { Account, AccountUsageInfo } from '@/types'
 
 const props = withDefaults(defineProps<{
@@ -57,11 +60,11 @@ const balanceLine = computed(() => {
   return `$${formatted}`
 })
 
-const statusLine = computed(() => {
+const metaLine = computed(() => {
   if (!summary.value) return ''
-  const updated = summary.value.updated_at ? formatRelativeTime(summary.value.updated_at) : ''
   const status = summary.value.status || 'ok'
-  return updated ? `${status} · ${updated}` : status
+  if (status !== 'ok') return status
+  return ''
 })
 
 const statusClass = computed(() => {

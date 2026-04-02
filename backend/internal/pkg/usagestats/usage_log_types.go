@@ -129,6 +129,16 @@ type GroupStat struct {
 	ActualCost  float64 `json:"actual_cost"` // 实际扣除
 }
 
+// AccountStat represents usage statistics for a single upstream account.
+type AccountStat struct {
+	AccountID   int64   `json:"account_id"`
+	AccountName string  `json:"account_name"`
+	Requests    int64   `json:"requests"`
+	TotalTokens int64   `json:"total_tokens"`
+	Cost        float64 `json:"cost"`        // 标准计费
+	ActualCost  float64 `json:"actual_cost"` // 实际扣除
+}
+
 // UserUsageTrendPoint represents user usage trend data point
 type UserUsageTrendPoint struct {
 	Date       string  `json:"date"`
@@ -250,6 +260,7 @@ type UsageStats struct {
 	Endpoints         []EndpointStat `json:"endpoints,omitempty"`
 	UpstreamEndpoints []EndpointStat `json:"upstream_endpoints,omitempty"`
 	EndpointPaths     []EndpointStat `json:"endpoint_paths,omitempty"`
+	Accounts          []AccountStat  `json:"accounts,omitempty"`
 }
 
 // BatchUserUsageStats represents usage stats for a single user

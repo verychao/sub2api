@@ -1,6 +1,6 @@
 <template>
-  <div class="card p-4">
-    <div class="mb-4 flex items-center justify-between gap-3">
+  <div class="card p-3">
+    <div class="mb-3 flex items-center justify-between gap-2">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
         {{ !enableRankingView || activeView === 'model_distribution'
           ? t('admin.dashboard.modelDistribution')
@@ -96,17 +96,17 @@
       </div>
     </div>
 
-    <div v-if="activeView === 'model_distribution' && loading" class="flex h-48 items-center justify-center">
+    <div v-if="activeView === 'model_distribution' && loading" class="flex h-40 items-center justify-center">
       <LoadingSpinner />
     </div>
     <div
       v-else-if="activeView === 'model_distribution' && displayModelStats.length > 0 && chartData"
-      class="flex items-center gap-6"
+      class="flex items-center gap-4"
     >
-      <div class="h-48 w-48">
+      <div class="h-40 w-40 shrink-0">
         <Doughnut :data="chartData" :options="doughnutOptions" />
       </div>
-      <div class="max-h-48 flex-1 overflow-y-auto">
+      <div class="max-h-40 flex-1 overflow-y-auto">
         <table class="w-full text-xs">
           <thead>
             <tr class="text-gray-500 dark:text-gray-400">
@@ -161,25 +161,25 @@
     </div>
     <div
       v-else-if="activeView === 'model_distribution'"
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-40 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
     >
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
 
-    <div v-else-if="rankingLoading" class="flex h-48 items-center justify-center">
+    <div v-else-if="rankingLoading" class="flex h-40 items-center justify-center">
       <LoadingSpinner />
     </div>
     <div
       v-else-if="rankingError"
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-40 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
     >
       {{ t('admin.dashboard.failedToLoad') }}
     </div>
-    <div v-else-if="rankingDisplayItems.length > 0 && rankingChartData" class="flex items-center gap-6">
-      <div class="h-48 w-48">
+    <div v-else-if="rankingDisplayItems.length > 0 && rankingChartData" class="flex items-center gap-4">
+      <div class="h-40 w-40 shrink-0">
         <Doughnut :data="rankingChartData" :options="rankingDoughnutOptions" />
       </div>
-      <div class="max-h-48 flex-1 overflow-y-auto">
+      <div class="max-h-40 flex-1 overflow-y-auto">
         <table class="w-full text-xs">
           <thead>
             <tr class="text-gray-500 dark:text-gray-400">
@@ -228,7 +228,7 @@
     </div>
     <div
       v-else
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-40 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
     >
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>

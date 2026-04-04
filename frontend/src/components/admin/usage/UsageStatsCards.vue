@@ -1,5 +1,5 @@
 <template>
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+  <div class="grid grid-cols-2 gap-4 xl:grid-cols-5">
     <div class="card p-4 flex items-center gap-3">
       <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30 text-blue-600">
         <Icon name="document" size="md" />
@@ -48,6 +48,15 @@
       </div>
       <div><p class="text-xs font-medium text-gray-500">{{ t('usage.avgDuration') }}</p><p class="text-xl font-bold">{{ formatDuration(stats?.average_duration_ms || 0) }}</p></div>
     </div>
+    <div class="card p-4 flex items-center gap-3">
+      <div class="rounded-lg bg-cyan-100 p-2 text-cyan-600 dark:bg-cyan-900/30">
+        <Icon name="dollar" size="md" />
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="text-xs font-medium text-gray-500">{{ t('usage.upstreamAvailableBalance') }}</p>
+        <p class="text-xl font-bold text-cyan-500">${{ upstreamAvailableBalance.toFixed(2) }}</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -56,7 +65,10 @@ import { useI18n } from 'vue-i18n'
 import type { AdminUsageStatsResponse } from '@/api/admin/usage'
 import Icon from '@/components/icons/Icon.vue'
 
-defineProps<{ stats: AdminUsageStatsResponse | null }>()
+defineProps<{
+  stats: AdminUsageStatsResponse | null
+  upstreamAvailableBalance: number
+}>()
 
 const { t } = useI18n()
 

@@ -1,11 +1,11 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <UsageStatsCards :stats="usageStats" />
+      <UsageStatsCards :stats="usageStats" :upstream-available-balance="upstreamAvailableBalance" />
       <!-- Charts Section -->
       <div class="space-y-4">
         <div class="card p-4">
-          <div class="flex flex-wrap items-center gap-4">
+          <div class="flex flex-wrap items-center gap-3">
             <div class="flex items-center gap-2">
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.dashboard.timeRange') }}:</span>
               <DateRangePicker
@@ -15,15 +15,48 @@
               />
             </div>
             <div class="ml-auto flex items-center gap-2">
+              <div class="relative" ref="chartDropdownRef">
+                <button
+                  @click="showChartDropdown = !showChartDropdown"
+                  class="btn btn-secondary px-2 md:px-3"
+                  :title="t('admin.usage.displayCards')"
+                >
+                  <svg class="h-4 w-4 md:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5m-16.5 5.25h16.5m-16.5 5.25h16.5" />
+                  </svg>
+                  <span class="hidden md:inline">{{ t('admin.usage.displayCards') }}</span>
+                </button>
+                <div
+                  v-if="showChartDropdown"
+                  class="absolute right-0 top-full z-50 mt-1 w-52 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
+                >
+                  <button
+                    v-for="item in toggleableChartCards"
+                    :key="item.key"
+                    @click="toggleChartCard(item.key)"
+                    class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                  >
+                    <span>{{ item.label }}</span>
+                    <Icon
+                      v-if="isChartCardVisible(item.key)"
+                      name="check"
+                      size="sm"
+                      class="text-primary-500"
+                      :stroke-width="2"
+                    />
+                  </button>
+                </div>
+              </div>
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.dashboard.granularity') }}:</span>
-              <div class="w-28">
+              <div class="w-24 sm:w-28">
                 <Select v-model="granularity" :options="granularityOptions" @change="loadChartData" />
               </div>
             </div>
           </div>
         </div>
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div class="grid grid-cols-1 gap-4 2xl:grid-cols-3">
           <ModelDistributionChart
+            v-if="isChartCardVisible('model')"
             v-model:source="modelDistributionSource"
             v-model:metric="modelDistributionMetric"
             :model-stats="requestedModelStats"
@@ -36,6 +69,7 @@
             :end-date="endDate"
           />
           <GroupDistributionChart
+            v-if="isChartCardVisible('group')"
             v-model:metric="groupDistributionMetric"
             :group-stats="groupStats"
             :loading="chartsLoading"
@@ -43,9 +77,8 @@
             :start-date="startDate"
             :end-date="endDate"
           />
-        </div>
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <EndpointDistributionChart
+            v-if="isChartCardVisible('endpoint')"
             v-model:source="endpointDistributionSource"
             v-model:metric="endpointDistributionMetric"
             :endpoint-stats="inboundEndpointStats"
@@ -58,17 +91,20 @@
             :start-date="startDate"
             :end-date="endDate"
           />
-          <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
           <AccountDistributionCard
+            v-if="isChartCardVisible('account')"
             v-model:metric="accountDistributionMetric"
             :accounts="accountStats"
+            :account-balances="accountBalances"
             :loading="endpointStatsLoading"
+            @refresh-balances="refreshUpstreamAvailableBalance"
           />
+          <TokenUsageTrend v-if="isChartCardVisible('trend')" :trend-data="trendData" :loading="chartsLoading" />
         </div>
       </div>
-      <UsageFilters v-model="filters" :start-date="startDate" :end-date="endDate" :exporting="exporting" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
+      <UsageFilters v-if="isChartCardVisible('filters')" v-model="filters" :start-date="startDate" :end-date="endDate" :exporting="exporting" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
         <template #after-reset>
           <div class="relative" ref="columnDropdownRef">
             <button
@@ -131,6 +167,7 @@ import { useI18n } from 'vue-i18n'
 import { saveAs } from 'file-saver'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'; import { adminAPI } from '@/api/admin'; import { adminUsageAPI } from '@/api/admin/usage'
+import { getUsage } from '@/api/admin/accounts'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
@@ -143,13 +180,20 @@ import ModelDistributionChart from '@/components/charts/ModelDistributionChart.v
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import AccountDistributionCard from '@/components/charts/AccountDistributionCard.vue'
 import Icon from '@/components/icons/Icon.vue'
-import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AccountStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
+import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AccountStat, AdminUser, Account } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
 type ModelDistributionSource = 'requested' | 'upstream' | 'mapping'
+interface AccountBalanceSummary {
+  accountId: number
+  value: string
+  updatedAt?: string | null
+  remaining: number
+  status?: string
+}
 const route = useRoute()
 const usageStats = ref<AdminUsageStatsResponse | null>(null); const usageLogs = ref<AdminUsageLog[]>([]); const loading = ref(false); const exporting = ref(false)
 const trendData = ref<TrendDataPoint[]>([]); const requestedModelStats = ref<ModelStat[]>([]); const upstreamModelStats = ref<ModelStat[]>([]); const mappingModelStats = ref<ModelStat[]>([]); const groupStats = ref<GroupStat[]>([]); const chartsLoading = ref(false); const modelStatsLoading = ref(false); const granularity = ref<'day' | 'hour'>('hour')
@@ -169,6 +213,10 @@ const upstreamEndpointStats = ref<EndpointStat[]>([])
 const endpointPathStats = ref<EndpointStat[]>([])
 const accountStats = ref<AccountStat[]>([])
 const endpointStatsLoading = ref(false)
+const upstreamAvailableBalance = ref(0)
+const accountBalances = ref<AccountBalanceSummary[]>([])
+const UPSTREAM_BALANCE_STALE_MS = 30 * 60 * 1000
+let upstreamBalanceLastLoadedAt = 0
 let abortController: AbortController | null = null; let exportAbortController: AbortController | null = null
 let chartReqSeq = 0
 let statsReqSeq = 0
@@ -197,12 +245,11 @@ const formatLD = (d: Date) => {
   const day = String(d.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
-const getLast24HoursRangeDates = (): { start: string; end: string } => {
-  const end = new Date()
-  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000)
+const getTodayRangeDates = (): { start: string; end: string } => {
+  const today = new Date()
   return {
-    start: formatLD(start),
-    end: formatLD(end)
+    start: formatLD(today),
+    end: formatLD(today)
   }
 }
 const getGranularityForRange = (start: string, end: string): 'day' | 'hour' => {
@@ -211,7 +258,7 @@ const getGranularityForRange = (start: string, end: string): 'day' | 'hour' => {
   const daysDiff = Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24))
   return daysDiff <= 1 ? 'hour' : 'day'
 }
-const defaultRange = getLast24HoursRangeDates()
+const defaultRange = getTodayRangeDates()
 const startDate = ref(defaultRange.start); const endDate = ref(defaultRange.end)
 const filters = ref<AdminUsageQueryParams>({ user_id: undefined, model: undefined, group_id: undefined, request_type: undefined, billing_type: null, start_date: startDate.value, end_date: endDate.value })
 const pagination = reactive({ page: 1, page_size: getPersistedPageSize(), total: 0 })
@@ -385,6 +432,68 @@ const loadChartData = async () => {
     groupStats.value = snapshot.groups || []
   } catch (error) { console.error('Failed to load chart data:', error) } finally { if (seq === chartReqSeq) chartsLoading.value = false }
 }
+
+const loadUpstreamAvailableBalance = async (force = false) => {
+  if (!force && Date.now() - upstreamBalanceLastLoadedAt < UPSTREAM_BALANCE_STALE_MS) {
+    return
+  }
+  try {
+    const result = await adminAPI.accounts.list(1, 100, { status: 'active' })
+    const accounts = (result.items || []) as Account[]
+    if (!accounts.length) {
+      upstreamAvailableBalance.value = 0
+      accountBalances.value = []
+      return
+    }
+
+    const balances = await Promise.all(accounts.map(async (account) => {
+      try {
+        const usage = await getUsage(account.id, 'active')
+        const platformUsage = usage.platform_usage
+        const remaining =
+          platformUsage &&
+          platformUsage.is_valid !== false &&
+          typeof platformUsage.remaining === 'number' &&
+          Number.isFinite(platformUsage.remaining)
+            ? Math.max(platformUsage.remaining, 0)
+            : 0
+
+        return {
+          accountId: account.id,
+          value: typeof platformUsage?.remaining === 'number'
+            ? (platformUsage.unit && platformUsage.unit.toUpperCase() !== 'USD'
+                ? `${platformUsage.remaining.toFixed(2)} ${platformUsage.unit}`
+                : `$${platformUsage.remaining.toFixed(2)}`)
+            : '--',
+          updatedAt: platformUsage?.updated_at ?? null,
+          remaining,
+          status: platformUsage?.status,
+        }
+      } catch {
+        return {
+          accountId: account.id,
+          value: '--',
+          updatedAt: null,
+          remaining: 0,
+          status: 'request_failed',
+        }
+      }
+    }))
+
+    accountBalances.value = balances
+    upstreamAvailableBalance.value = balances.reduce((sum, item) => sum + item.remaining, 0)
+    upstreamBalanceLastLoadedAt = Date.now()
+  } catch (error) {
+    console.error('Failed to load upstream available balance:', error)
+    upstreamAvailableBalance.value = 0
+    accountBalances.value = []
+  }
+}
+
+const refreshUpstreamAvailableBalance = async () => {
+  await loadUpstreamAvailableBalance(true)
+}
+
 const applyFilters = () => {
   pagination.page = 1
   resetModelStatsCache()
@@ -401,7 +510,7 @@ const refreshData = () => {
   loadChartData()
 }
 const resetFilters = () => {
-  const range = getLast24HoursRangeDates()
+  const range = getTodayRangeDates()
   startDate.value = range.start
   endDate.value = range.end
   filters.value = { start_date: startDate.value, end_date: endDate.value, request_type: undefined, billing_type: null }
@@ -479,6 +588,8 @@ const exportToExcel = async () => {
 const ALWAYS_VISIBLE = ['user', 'created_at']
 const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'user_agent']
 const HIDDEN_COLUMNS_KEY = 'usage-hidden-columns'
+const HIDDEN_CHART_CARDS_KEY = 'usage-hidden-chart-cards'
+type ChartCardKey = 'model' | 'group' | 'endpoint' | 'account' | 'trend' | 'filters'
 
 const allColumns = computed(() => [
   { key: 'user', label: t('admin.usage.user'), sortable: false },
@@ -499,6 +610,7 @@ const allColumns = computed(() => [
 ])
 
 const hiddenColumns = reactive<Set<string>>(new Set())
+const hiddenChartCards = reactive<Set<ChartCardKey>>(new Set())
 
 const toggleableColumns = computed(() =>
   allColumns.value.filter(col => !ALWAYS_VISIBLE.includes(col.key))
@@ -511,6 +623,32 @@ const visibleColumns = computed(() =>
 )
 
 const isColumnVisible = (key: string) => !hiddenColumns.has(key)
+const allChartCards = computed(() => [
+  { key: 'filters' as ChartCardKey, label: t('admin.usage.filtersCard') },
+  { key: 'model' as ChartCardKey, label: t('admin.usage.modelDistributionCard') },
+  { key: 'group' as ChartCardKey, label: t('admin.usage.groupDistributionCard') },
+  { key: 'endpoint' as ChartCardKey, label: t('admin.usage.endpointDistributionCard') },
+  { key: 'account' as ChartCardKey, label: t('admin.usage.accountDistributionCard') },
+  { key: 'trend' as ChartCardKey, label: t('admin.usage.tokenTrendCard') },
+])
+
+const toggleableChartCards = computed(() => allChartCards.value)
+
+const isChartCardVisible = (key: ChartCardKey) => !hiddenChartCards.has(key)
+
+const toggleChartCard = (key: ChartCardKey) => {
+  if (hiddenChartCards.has(key)) {
+    hiddenChartCards.delete(key)
+  } else if (allChartCards.value.length - hiddenChartCards.size > 1) {
+    hiddenChartCards.add(key)
+  }
+
+  try {
+    localStorage.setItem(HIDDEN_CHART_CARDS_KEY, JSON.stringify([...hiddenChartCards]))
+  } catch (e) {
+    console.error('Failed to save chart cards:', e)
+  }
+}
 
 const toggleColumn = (key: string) => {
   if (hiddenColumns.has(key)) {
@@ -544,12 +682,30 @@ const loadSavedColumns = () => {
   }
 }
 
+const loadSavedChartCards = () => {
+  try {
+    const saved = localStorage.getItem(HIDDEN_CHART_CARDS_KEY)
+    if (saved) {
+      ;(JSON.parse(saved) as ChartCardKey[]).forEach((key) => {
+        hiddenChartCards.add(key)
+      })
+    }
+  } catch (e) {
+    console.error('Failed to load chart cards:', e)
+  }
+}
+
 const showColumnDropdown = ref(false)
 const columnDropdownRef = ref<HTMLElement | null>(null)
+const showChartDropdown = ref(false)
+const chartDropdownRef = ref<HTMLElement | null>(null)
 
 const handleColumnClickOutside = (event: MouseEvent) => {
   if (columnDropdownRef.value && !columnDropdownRef.value.contains(event.target as HTMLElement)) {
     showColumnDropdown.value = false
+  }
+  if (chartDropdownRef.value && !chartDropdownRef.value.contains(event.target as HTMLElement)) {
+    showChartDropdown.value = false
   }
 }
 
@@ -561,7 +717,9 @@ onMounted(() => {
   window.setTimeout(() => {
     void loadChartData()
   }, 120)
+  void loadUpstreamAvailableBalance(false)
   loadSavedColumns()
+  loadSavedChartCards()
   document.addEventListener('click', handleColumnClickOutside)
 })
 onUnmounted(() => { abortController?.abort(); exportAbortController?.abort(); document.removeEventListener('click', handleColumnClickOutside) })

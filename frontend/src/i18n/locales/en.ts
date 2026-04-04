@@ -173,6 +173,8 @@ export default {
     totalCacheRead: 'Total Cache Read',
     totalCost: 'Total Cost',
     avgDuration: 'Avg Duration',
+    upstreamAvailableBalance: 'Upstream Available Balance',
+    ignoresUnavailableBalances: 'Unavailable or failed accounts are treated as 0',
     // Messages
     enterApiKey: 'Please enter an API Key',
     querySuccess: 'Query successful',
@@ -711,6 +713,8 @@ export default {
     accountBilled: 'Account billed',
     accountMultiplier: 'Account rate',
     avgDuration: 'Avg Duration',
+    upstreamAvailableBalance: 'Upstream Available Balance',
+    ignoresUnavailableBalances: 'Unavailable or failed accounts are treated as 0',
     inSelectedRange: 'in selected range',
     perRequest: 'per request',
     apiKeyFilter: 'API Key',
@@ -970,6 +974,7 @@ export default {
       modelDistribution: 'Model Distribution',
       groupDistribution: 'Group Usage Distribution',
       accountDistribution: 'Upstream Account Distribution',
+      balanceOverview: 'Current Balance Overview',
       metricTokens: 'By Tokens',
       metricActualCost: 'By Actual Cost',
       tokenUsageTrend: 'Token Usage Trend',
@@ -3231,6 +3236,13 @@ export default {
 
     // Usage Records
     usage: {
+      displayCards: 'Display Cards',
+      filtersCard: 'Filters Panel',
+      modelDistributionCard: 'Model Distribution',
+      groupDistributionCard: 'Group Distribution',
+      endpointDistributionCard: 'Endpoint Distribution',
+      accountDistributionCard: 'Upstream Account Distribution',
+      tokenTrendCard: 'Token Usage Trend',
       title: 'Usage Records',
       description: 'View and manage all user usage records',
       userFilter: 'User',

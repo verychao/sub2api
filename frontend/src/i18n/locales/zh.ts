@@ -173,6 +173,8 @@ export default {
     totalCacheRead: '累计缓存读取',
     totalCost: '累计费用',
     avgDuration: '平均耗时',
+    upstreamAvailableBalance: '上游可用余额',
+    ignoresUnavailableBalances: '异常或查询失败账号按 0 忽略',
     // Messages
     enterApiKey: '请输入 API Key',
     querySuccess: '查询成功',
@@ -716,6 +718,8 @@ export default {
     accountBilled: '账号计费',
     accountMultiplier: '账号倍率',
     avgDuration: '平均耗时',
+    upstreamAvailableBalance: '上游可用余额',
+    ignoresUnavailableBalances: '异常或查询失败账号按 0 忽略',
     inSelectedRange: '所选范围内',
     perRequest: '每次请求',
     apiKeyFilter: 'API 密钥',
@@ -983,6 +987,7 @@ export default {
       modelDistribution: '模型分布',
       groupDistribution: '分组使用分布',
       accountDistribution: '上游账号分布',
+      balanceOverview: '当前余额概览',
       metricTokens: '按 Token',
       metricActualCost: '按实际消费',
       tokenUsageTrend: 'Token 使用趋势',
@@ -3390,6 +3395,13 @@ export default {
 
     // Usage Records
     usage: {
+      displayCards: '展示卡片',
+      filtersCard: '筛选面板',
+      modelDistributionCard: '模型分布',
+      groupDistributionCard: '分组使用分布',
+      endpointDistributionCard: '端点分布',
+      accountDistributionCard: '上游账号分布',
+      tokenTrendCard: 'Token 使用趋势',
       title: '使用记录',
       description: '查看和管理所有用户的使用记录',
       userFilter: '用户',

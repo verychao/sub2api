@@ -1,32 +1,67 @@
 <template>
   <div class="card p-4">
-    <div class="mb-4 flex items-center justify-between gap-3">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
         {{ t('admin.dashboard.accountDistribution') }}
       </h3>
-      <div
-        class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-700 dark:bg-dark-800"
-      >
+      <div class="flex flex-wrap items-center justify-end gap-2">
         <button
           type="button"
-          class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
-          :class="metric === 'tokens'
-            ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
-            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
-          @click="emit('update:metric', 'tokens')"
+          class="btn btn-secondary px-2.5 py-1 text-xs"
+          :disabled="refreshingBalances"
+          @click="refreshBalances"
         >
-          {{ t('admin.dashboard.metricTokens') }}
+          {{ refreshingBalances ? t('common.refreshing') : t('common.refresh') }}
         </button>
-        <button
-          type="button"
-          class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
-          :class="metric === 'actual_cost'
-            ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
-            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
-          @click="emit('update:metric', 'actual_cost')"
+        <div
+          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-700 dark:bg-dark-800"
         >
-          {{ t('admin.dashboard.metricActualCost') }}
-        </button>
+          <button
+            type="button"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            :class="metric === 'tokens'
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+            @click="emit('update:metric', 'tokens')"
+          >
+            {{ t('admin.dashboard.metricTokens') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            :class="metric === 'actual_cost'
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+            @click="emit('update:metric', 'actual_cost')"
+          >
+            {{ t('admin.dashboard.metricActualCost') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="balanceItems.length" class="mb-4 rounded-xl border border-gray-200/80 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-dark-800/80">
+      <div class="mb-2 flex items-center justify-between gap-2">
+        <span class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          {{ t('admin.dashboard.balanceOverview') }}
+        </span>
+        <span v-if="lastUpdatedLabel" class="text-xs text-gray-400 dark:text-gray-500">
+          {{ lastUpdatedLabel }}
+        </span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <div
+          v-for="item in balanceItems"
+          :key="item.accountId"
+          class="min-w-[150px] rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-dark-700"
+        >
+          <div class="truncate text-xs text-gray-500 dark:text-gray-400" :title="item.name">
+            {{ item.name }}
+          </div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+            {{ item.value }}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -74,10 +109,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import type { AccountStat } from '@/types'
+
+interface AccountBalanceSummary {
+  accountId: number
+  value: string
+  updatedAt?: string | null
+}
 
 type DistributionMetric = 'tokens' | 'actual_cost'
 
@@ -85,22 +126,64 @@ const props = withDefaults(defineProps<{
   accounts: AccountStat[]
   loading?: boolean
   metric?: DistributionMetric
+  accountBalances?: AccountBalanceSummary[]
 }>(), {
   loading: false,
   metric: 'tokens',
+  accountBalances: () => [],
 })
 
 const emit = defineEmits<{
   'update:metric': [value: DistributionMetric]
+  'refresh-balances': []
 }>()
 
 const { t } = useI18n()
+const refreshingBalances = ref(false)
+
+const balanceByAccountId = computed<Record<number, { value: string; updatedAt?: string | null }>>(() =>
+  Object.fromEntries((props.accountBalances || []).map((item) => [item.accountId, {
+    value: item.value,
+    updatedAt: item.updatedAt ?? null,
+  }]))
+)
+
+const balanceItems = computed(() => sortedAccounts.value
+  .map((item) => ({
+    accountId: item.account_id,
+    name: item.account_name || '-',
+    value: balanceByAccountId.value[item.account_id]?.value,
+  }))
+  .filter((item): item is { accountId: number; name: string; value: string } => Boolean(item.value)))
+
+const lastUpdatedLabel = computed(() => {
+  const updatedAt = Object.values(balanceByAccountId.value)
+    .map((item) => item.updatedAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1)
+
+  if (!updatedAt) return ''
+
+  const parsed = new Date(updatedAt)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return parsed.toLocaleString()
+})
 
 const sortedAccounts = computed(() => {
   if (!props.accounts?.length) return []
   const metricKey = props.metric === 'actual_cost' ? 'actual_cost' : 'total_tokens'
   return [...props.accounts].sort((a, b) => b[metricKey] - a[metricKey])
 })
+
+const refreshBalances = async () => {
+  refreshingBalances.value = true
+  try {
+    await emit('refresh-balances')
+  } finally {
+    refreshingBalances.value = false
+  }
+}
 
 const formatTokens = (value: number): string => {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`

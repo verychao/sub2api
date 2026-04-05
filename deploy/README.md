@@ -5,6 +5,7 @@ This directory contains files for deploying Sub2API on Linux servers.
 For Synology environments that cannot reliably pull from GitHub/GHCR, see:
 
 - `../docs/deploy-synology-local-release.md`
+- `SYNOLOGY_RELEASE_CN.md`
 
 ## Deployment Methods
 
